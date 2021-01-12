@@ -1,12 +1,21 @@
 {
-  "name": "mapcache",
-  "version": "1.0.0",
-  "description": "",
-  "main": "doanloadIMages.js",
+  "name": "mapcachetools",
+  "version": "1.0.6",
+  "description": "This tool downloads images from a map provider and cache it locally on your device. Please check terms and condition of your map provider. The tool is provided as is with no responsibility from author. Please Use IT AT YOUR OWN RISK.",
+  "main": "downloadmaps.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node ./bin/downloadmaps.js"
   },
-  "author": "",
+  "bin": {
+    "mapcache_download": "mapcache_download.js"
+  },
+  "keywords": [
+    "map",
+    "local server",
+    "cache"
+  ],
+  "homepage": "https://github.com/HefnySco/mapcache",
+  "author": "Mohammad Said Hefny - rcmobilestuff <rcmobilestuff@gmail.com> (http://www.andruav.com)",
   "license": "ISC",
   "dependencies": {
     "axios": "^0.21.1",

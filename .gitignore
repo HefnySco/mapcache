@@ -1,4 +1,8 @@
-out/
+out*/
 package-lock.json
 .vscode/
 node_modules/
+*.pngraw
+*.jpeg
+*.tar
+
