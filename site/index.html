@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Map Sample</title>
+    <link rel="stylesheet" type="text/css" href="./css/styles.css">
+    <link rel="stylesheet" type="text/css" href="./css/leaflet.css">
+    <script language="JavaScript" type="text/javascript" src="./js/jquery/jquery-3.4.1.min.js"></script>
+	<script language="JavaScript" type="text/javascript" src="./js/leaflet-src.js"></script>
+	<script language="JavaScript" type="text/javascript" src="./js/leaflet.rotatedMarker.js"></script>
+	<script>
+
+        var fn_on_ready = function () 
+        {
+            
+                var mymap = L.map('mapid').setView([51.505, -0.09], 13);
+            
+                L.tileLayer('http://127.0.0.1:9991/cachedMaps/{x}_{y}_{z}.jpeg', {
+                    attribution: 'TEST SITE',
+                    maxZoom: 18,
+                    id: 'mapbox/streets-v11',
+                    tileSize: 512,
+                    zoomOffset: -1,
+                    accessToken: 'your.mapbox.access.token'
+                }).addTo(mymap);
+        };
+
+        $(document).ready(fn_on_ready);
+    </script>
+ 
+</head>
+
+<body>
+
+    <div id="mapid"></div>
+
+</body>
+
+
+
+</html>
