@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+
+
 /*
     Download images sequentially
 */
@@ -12,8 +15,8 @@ const axios = require("axios");
 const EARTH_RADIUS = 6378137;
 const MAX_LATITUDE = 85.0511287798;
 const R_MINOR = 6356752.314245179;
-const TOKEN = "pk.eyJ1IjoibWhlZm55IiwiYSI6ImNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDjXCthXmRsErPzKhbQ"; //"GET YOUR TOKEN";
-var map_provider = 1;
+const TOKEN = "GET YOUR TOKEN";
+var map_provider = 0;
 var myArgs = c_args.getArgs();
 
 /*
@@ -158,7 +161,7 @@ function fn_download_images(point1, point2, zoom) {
                   j +
                   ".png";
           }
-          filename = folder + "/" + zoom + "_" + i + "_" + j +  ".jpeg";
+          filename = folder + "/" + i + "_" + j + "_" + zoom +  ".jpeg";
           if (!fs.existsSync(filename)) {
             await download_image(url, filename);
           }
@@ -174,7 +177,6 @@ function fn_download_images(point1, point2, zoom) {
 
 function fn_handle_arguments() {
   myArgs = c_args.getArgs();
-  console.log(JSON.stringify(myArgs));
   var error = false;
   if (
     myArgs.hasOwnProperty("version") === true ||
@@ -343,6 +345,7 @@ function fn_handle_arguments() {
   if (myArgs.hasOwnProperty("provider") === true) {
     if (myArgs.provider == 1)
     {
+      map_provider = 1;
       if (myArgs.hasOwnProperty("token") !== true) {
         error = true;
         console.log(
