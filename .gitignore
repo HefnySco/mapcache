@@ -4,5 +4,5 @@ package-lock.json
 node_modules/
 *.pngraw
 *.jpeg
-site/cachedMaps
 *.tar
+
