@@ -12,8 +12,12 @@ You can use these images with a library like [Leafet](https://leafletjs.com/ "Le
 
 Download area from 58.5500977,-4.5231876   to 58.5501,-4.5231976 with maximum zoom in of 20 and minimum zoom in of 0 i.e. whole world zoom, and store images in folder called image_folder
 
-
-    mapcache_download --lat1=58.5500977 --lng1=-4.5231876 --lat2=58.5501 --lng2=-4.5231976 --zin=20 --zout=0 --folder=./image_folder
+    https://github.com/HefnySco/mapcache.git
+    cd mapcache
+    node mapcache_download --lat1=58.5500977 --lng1=-4.5231876 --lat2=58.5501 --lng2=-4.5231976 --zin=20 --zout=0 --folder=./site/cachedMaps
+    cd site
+    node install http-server -g
+    http-server 
 
 ## Map Providers
 
