@@ -1,6 +1,6 @@
 {
   "name": "mapcachetools",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "This tool downloads images from a map provider and cache it locally on your device. Please check terms and condition of your map provider. The tool is provided as is with no responsibility from author. Please Use IT AT YOUR OWN RISK.",
   "main": "downloadmaps.js",
   "scripts": {

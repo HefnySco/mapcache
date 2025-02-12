@@ -27,20 +27,20 @@ var myArgs = c_args.getArgs();
  * used by almost all free and commercial tile providers. Assumes that Earth is
  * a sphere. Used by the `EPSG:3857` CRS.
  */
-function project(lat, lng) {
-  var d = Math.PI / 180,
+function project(p_lat, p_lng) {
+  const d = Math.PI / 180,
     max = MAX_LATITUDE,
-    lat = Math.max(Math.min(max, lat), -max),
+    lat = Math.max(Math.min(max, p_lat), -max),
     sin = Math.sin(lat * d);
 
   return {
-    x: EARTH_RADIUS * lng * d,
+    x: EARTH_RADIUS * p_lng * d,
     y: (EARTH_RADIUS * Math.log((1 + sin) / (1 - sin))) / 2,
   };
 }
 
 function unproject(point) {
-  var d = 180 / Math.PI;
+  const d = 180 / Math.PI;
 
   return {
     lat: (2 * Math.atan(Math.exp(point.y / EARTH_RADIUS)) - Math.PI / 2) * d,
@@ -62,22 +62,22 @@ function transform(point, scale) {
 function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
   // order location
   if (lng1 > lng2) {
-    var t = lng2;
+    const t = lng2;
     lng2 = lng1;
     lng1 = t;
   }
 
   if (lat1 > lat2) {
-    var t = lat2;
+    const t = lat2;
     lat2 = lat1;
     lat1 = t;
   }
 
   // convert to points
-  var point1 = project(lat1, lng1);
-  var point2 = project(lat2, lng2);
+  let point1 = project(lat1, lng1);
+  let point2 = project(lat2, lng2);
 
-  var scaledZoom = zoomScale(zoom);
+  let scaledZoom = zoomScale(zoom);
   point1 = transform(point1, scaledZoom);
   point2 = transform(point2, scaledZoom);
 
@@ -89,7 +89,7 @@ function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
 
   // sort
   if (point1.y > point2.y) {
-    var t = point2.y;
+    const t = point2.y;
     point2.y = point1.y;
     point1.y = t;
   }
@@ -124,12 +124,12 @@ const download_image = (url, image_path) =>
 
 function fn_download_images(point1, point2, zoom) {
   (async () => {
-    var url, filename;
-    var totalImages =
+    let url, filename;
+    const totalImages =
       (1 + (point2.x + 1) - point1.x) * (1 + (point2.y + 1) - point1.y);
-    var START_FROM = 0;
+      let START_FROM = 0;
 
-    for (var j, c = 0, i = point1.x; i <= point2.x + 1; ++i)
+    for (let j, c = 0, i = point1.x; i <= point2.x + 1; ++i)
       for (j = point1.y; j <= point2.y + 1; ++j, ++c) {
         if (c >= START_FROM) {
          /*
@@ -177,10 +177,12 @@ function fn_download_images(point1, point2, zoom) {
 
 function fn_handle_arguments() {
   myArgs = c_args.getArgs();
-  var error = false;
+  let error = false;
   if (
     myArgs.hasOwnProperty("version") === true ||
     myArgs.hasOwnProperty("v") === true
+    myArgs.hasOwnProperty("help") === true ||
+    myArgs.hasOwnProperty("h") === true
   ) {
     console.log(
       c_colors.BSuccess +
@@ -368,12 +370,12 @@ function fn_handle_arguments() {
 ============================================================ */
 
 fn_handle_arguments();
-var folder = myArgs.folder;
+const folder = myArgs.folder;
 for (var zoom = myArgs.zout; zoom <= myArgs.zin; ++zoom) {
-  var points = fn_convertFromLngLatToPoints(myArgs.lat1, myArgs.lng1, myArgs.lat2, myArgs.lng2, zoom);
+  const points = fn_convertFromLngLatToPoints(myArgs.lat1, myArgs.lng1, myArgs.lat2, myArgs.lng2, zoom);
 
-  var point1 = points[0];
-  var point2 = points[1];
+  const point1 = points[0];
+  const point2 = points[1];
 
   fn_download_images(point1, point2, zoom);
 }
