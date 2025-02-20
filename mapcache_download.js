@@ -27,14 +27,14 @@ var myArgs = c_args.getArgs();
  * used by almost all free and commercial tile providers. Assumes that Earth is
  * a sphere. Used by the `EPSG:3857` CRS.
  */
-function project(lat, lng) {
+function project(p_lat, p_lng) {
   const d = Math.PI / 180,
     max = MAX_LATITUDE,
-    lat = Math.max(Math.min(max, lat), -max),
+    lat = Math.max(Math.min(max, p_lat), -max),
     sin = Math.sin(lat * d);
 
   return {
-    x: EARTH_RADIUS * lng * d,
+    x: EARTH_RADIUS * p_lng * d,
     y: (EARTH_RADIUS * Math.log((1 + sin) / (1 - sin))) / 2,
   };
 }
@@ -181,6 +181,8 @@ function fn_handle_arguments() {
   if (
     myArgs.hasOwnProperty("version") === true ||
     myArgs.hasOwnProperty("v") === true
+    myArgs.hasOwnProperty("help") === true ||
+    myArgs.hasOwnProperty("h") === true
   ) {
     console.log(
       c_colors.BSuccess +
