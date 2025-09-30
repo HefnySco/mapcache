@@ -6,4 +6,6 @@ node_modules/
 *.jpeg
 *.tar
 MYKEY
-
+/image_folder
+/image_folder/*.png
+/site/cachedMaps/*
