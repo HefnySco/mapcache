@@ -11,7 +11,7 @@
     - Force redownload option.
     - Improved error handling and logging.
 
-    Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
+    Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
 
     Run with --help for full options.
 */
@@ -21,9 +21,9 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const sharp = require("sharp"); // Added for JPG-to-PNG conversion
-const v_pjson = require("./package.json"); // Assuming this exists; otherwise, hardcode version.
-const c_args = require("./helpers/hlp_args.js"); // Assuming this provides getArgs().
-const c_colors = require("./helpers/js_colors.js").Colors; // Assuming this provides color codes.
+const v_pjson = require("../package.json"); // Assuming this exists; otherwise, hardcode version.
+const c_args = require("../helpers/hlp_args.js"); // Assuming this provides getArgs().
+const c_colors = require("../helpers/js_colors.js").Colors; // Assuming this provides color codes.
 
 const EARTH_RADIUS = 6378137;
 const MAX_LATITUDE = 85.0511287798;
@@ -106,31 +106,35 @@ function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
   Enhanced Download Function with Retry
 ============================================================ */
 
-const download_image = async (url, image_path, isMapboxSatellite = false, retries = myArgs.retries || DEFAULT_RETRIES) => {
+download_image = async (url, image_path, isMapboxSatellite = false, retries = myArgs.retries || DEFAULT_RETRIES) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      if (map_provider === 1 || map_provider === 2) {
+        console.warn(c_colors.BWarning + 'Ensure compliance with Mapbox TOS (https://www.mapbox.com/tos) when caching tiles.' + c_colors.Reset);
+      }
       const response = await axios({
         url,
-        responseType: "arraybuffer", // Changed to arraybuffer for sharp compatibility
-        timeout: 10000, // 10s timeout
+        responseType: "arraybuffer",
+        timeout: 10000,
+        headers: { 'User-Agent': 'mapcachetools/2.1.0 (rcmobilestuff@gmail.com)' }
       });
 
-      // Convert to PNG if Mapbox Satellite (JPG), otherwise save directly
       const buffer = isMapboxSatellite
         ? await sharp(response.data).png().toBuffer()
         : response.data;
 
       await fs.promises.writeFile(image_path, buffer);
-      return; // Success
+      return;
     } catch (error) {
       console.log(c_colors.BError + `Attempt ${attempt} failed for ${url}: ${error.message}` + c_colors.Reset);
       if (attempt === retries) {
-        throw error; // Final failure
+        throw error;
       }
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
   }
 };
+
 
 /* ============================================================
   Generate Tile URL and Filename
@@ -226,7 +230,7 @@ function fn_handle_arguments() {
         (v_pjson.version || "1.0.0") +
         c_colors.Reset
     );
-    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat1, --lng1: Start coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat2, --lng2: End coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--zout: Min zoom (default: 0)" + c_colors.Reset);
