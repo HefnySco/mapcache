@@ -1,6 +1,6 @@
 {
   "name": "mapcachetools",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A Node.js tool to download and cache map tiles (OSM, Mapbox Satellite, Mapbox Terrain RGB) as PNG images for offline use in mapping applications. Use at your own risk and comply with provider terms.",
   "main": "bin/mapcache_download.js",
   "bin": {
