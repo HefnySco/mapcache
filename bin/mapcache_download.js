@@ -11,7 +11,7 @@
     - Force redownload option.
     - Improved error handling and logging.
 
-    Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
+    Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
 
     Run with --help for full options.
 */
@@ -106,35 +106,31 @@ function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
   Enhanced Download Function with Retry
 ============================================================ */
 
-download_image = async (url, image_path, isMapboxSatellite = false, retries = myArgs.retries || DEFAULT_RETRIES) => {
+const download_image = async (url, image_path, isMapboxSatellite = false, retries = myArgs.retries || DEFAULT_RETRIES) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      if (map_provider === 1 || map_provider === 2) {
-        console.warn(c_colors.BWarning + 'Ensure compliance with Mapbox TOS (https://www.mapbox.com/tos) when caching tiles.' + c_colors.Reset);
-      }
       const response = await axios({
         url,
-        responseType: "arraybuffer",
-        timeout: 10000,
-        headers: { 'User-Agent': 'mapcachetools/2.1.0 (rcmobilestuff@gmail.com)' }
+        responseType: "arraybuffer", // Changed to arraybuffer for sharp compatibility
+        timeout: 10000, // 10s timeout
       });
 
+      // Convert to PNG if Mapbox Satellite (JPG), otherwise save directly
       const buffer = isMapboxSatellite
         ? await sharp(response.data).png().toBuffer()
         : response.data;
 
       await fs.promises.writeFile(image_path, buffer);
-      return;
+      return; // Success
     } catch (error) {
       console.log(c_colors.BError + `Attempt ${attempt} failed for ${url}: ${error.message}` + c_colors.Reset);
       if (attempt === retries) {
-        throw error;
+        throw error; // Final failure
       }
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
     }
   }
 };
-
 
 /* ============================================================
   Generate Tile URL and Filename
@@ -230,7 +226,7 @@ function fn_handle_arguments() {
         (v_pjson.version || "1.0.0") +
         c_colors.Reset
     );
-    console.log(c_colors.BSuccess + "Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat1, --lng1: Start coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat2, --lng2: End coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--zout: Min zoom (default: 0)" + c_colors.Reset);
