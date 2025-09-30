@@ -1,31 +1,49 @@
-#!/usr/bin/env node
-
-
 /*
-    Download images sequentially
+    Enhanced Map Tile Downloader
+    - Downloads map tiles for a given geographic bounding box and zoom range.
+    - Supports OpenStreetMap (default) and Mapbox (with token).
+    - Parallel downloads with configurable concurrency to respect rate limits.
+    - Retry mechanism for failed downloads.
+    - Proper file extensions (.png for OSM, .jpg for Mapbox).
+    - Creates output folder if it doesn't exist.
+    - Progress reporting with total count and completion percentage.
+    - Better input validation and default values where sensible.
+    - Force redownload option.
+    - Improved error handling and logging.
+
+    Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
+
+    Run with --help for full options.
 */
 "use strict";
-const v_pjson = require("./package.json");
-const c_args = require("./helpers/hlp_args.js");
-const c_colors = require("./helpers/js_colors.js").Colors;
 
 const fs = require("fs");
+const path = require("path");
 const axios = require("axios");
+const v_pjson = require("./package.json"); // Assuming this exists; otherwise, hardcode version.
+const c_args = require("./helpers/hlp_args.js"); // Assuming this provides getArgs().
+const c_colors = require("./helpers/js_colors.js").Colors; // Assuming this provides color codes.
 
 const EARTH_RADIUS = 6378137;
 const MAX_LATITUDE = 85.0511287798;
-const R_MINOR = 6356752.314245179;
-const TOKEN = "GET YOUR TOKEN";
-var map_provider = 0;
-var myArgs = c_args.getArgs();
+const R_MINOR = 6356752.314245179; // Not used, but kept for completeness.
+
+// Default values
+const DEFAULT_PROVIDER = 0; // 0: OSM, 1: Mapbox
+const DEFAULT_CONCURRENCY = 5; // Safe default to avoid rate limits
+const DEFAULT_RETRIES = 3;
+const DEFAULT_ZOUT = 0;
+const DEFAULT_FORCE = false;
+
+// Global variables
+let map_provider = DEFAULT_PROVIDER;
+let TOKEN = ""; // Required for Mapbox
+let myArgs = c_args.getArgs();
+let totalTiles = 0;
+let downloadedTiles = 0;
 
 /*
- * @namespace Projection
- * @projection L.Projection.SphericalMercator
- *
- * Spherical Mercator projection — the most common projection for online maps,
- * used by almost all free and commercial tile providers. Assumes that Earth is
- * a sphere. Used by the `EPSG:3857` CRS.
+ * Projection functions (unchanged)
  */
 function project(p_lat, p_lng) {
   const d = Math.PI / 180,
@@ -60,20 +78,10 @@ function transform(point, scale) {
 }
 
 function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
-  // order location
-  if (lng1 > lng2) {
-    const t = lng2;
-    lng2 = lng1;
-    lng1 = t;
-  }
+  // Normalize bounds
+  if (lng1 > lng2) [lng1, lng2] = [lng2, lng1];
+  if (lat1 > lat2) [lat1, lat2] = [lat2, lat1];
 
-  if (lat1 > lat2) {
-    const t = lat2;
-    lat2 = lat1;
-    lat1 = t;
-  }
-
-  // convert to points
   let point1 = project(lat1, lng1);
   let point2 = project(lat2, lng2);
 
@@ -81,301 +89,237 @@ function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
   point1 = transform(point1, scaledZoom);
   point2 = transform(point2, scaledZoom);
 
-  // convert to integer
+  // Floor to tile indices
   point1.x = Math.floor(point1.x / 256);
   point1.y = Math.floor(point1.y / 256);
   point2.x = Math.floor(point2.x / 256);
   point2.y = Math.floor(point2.y / 256);
 
-  // sort
-  if (point1.y > point2.y) {
-    const t = point2.y;
-    point2.y = point1.y;
-    point1.y = t;
-  }
+  // Ensure point1 is top-left, point2 bottom-right
+  if (point1.y > point2.y) [point1.y, point2.y] = [point2.y, point1.y];
 
-  var point = [];
-
-  point.push(point1);
-  point.push(point2);
-
-  return point;
+  return [point1, point2];
 }
 
 /* ============================================================
-  Function: Download Image
+  Enhanced Download Function with Retry
 ============================================================ */
 
-const download_image = (url, image_path) =>
-  axios({
-    url,
-    responseType: "stream",
-  }).then(
-    (response) =>
-      new Promise((resolve, reject) => {
-        response.data
-          .pipe(fs.createWriteStream(image_path))
-          .on("finish", () => resolve())
-          .on("error", (e) => reject(e));
-      })
-  ).catch((error) => {
-    console.log(error.message);
-  });;
+const download_image = async (url, image_path, retries = myArgs.retries || DEFAULT_RETRIES) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios({
+        url,
+        responseType: "stream",
+        timeout: 10000, // 10s timeout
+      });
 
-function fn_download_images(point1, point2, zoom) {
-  (async () => {
-    let url, filename;
-    const totalImages =
-      (1 + (point2.x + 1) - point1.x) * (1 + (point2.y + 1) - point1.y);
-      let START_FROM = 0;
+      await new Promise((resolve, reject) => {
+        const writer = fs.createWriteStream(image_path);
+        response.data.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+      });
 
-    for (let j, c = 0, i = point1.x; i <= point2.x + 1; ++i)
-      for (j = point1.y; j <= point2.y + 1; ++j, ++c) {
-        if (c >= START_FROM) {
-         /*
-            You can edit URL here to download from any provider.
-         */ 
-          if (map_provider==1)
-          {
-              // MAPBOX API       
-              url =
-                  "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/" +
-                  zoom +
-                  "/" +
-                  i +
-                  "/" +
-                  j +
-                  "?access_token=" +
-                  TOKEN;
-          }
-          else
-          {
-              // Open Street Map 
-              // URL https://tile.openstreetmap.org/{z}/{x}/{y}.png
-              url =
-                  "https://tile.openstreetmap.org/" +
-                  zoom +
-                  "/" +
-                  i +
-                  "/" +
-                  j +
-                  ".png";
-          }
-          filename = folder + "/" + i + "_" + j + "_" + zoom +  ".jpeg";
-          if (!fs.existsSync(filename)) {
-            await download_image(url, filename);
-          }
-          else
-          {
-            console.log ("image no. " + c + " already exists.");
-          }
-          console.log(c + " of " + totalImages + ":" + url);
-        }
+      return; // Success
+    } catch (error) {
+      console.log(c_colors.BError + `Attempt ${attempt} failed for ${url}: ${error.message}` + c_colors.Reset);
+      if (attempt === retries) {
+        throw error; // Final failure
       }
-  })();
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+    }
+  }
+};
+
+/* ============================================================
+  Generate Tile URL and Filename
+============================================================ */
+
+function getTileUrlAndFilename(i, j, zoom) {
+  let url, ext, filename;
+  if (map_provider === 1) {
+    // Mapbox Satellite
+    url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/${zoom}/${i}/${j}?access_token=${TOKEN}`;
+    ext = ".jpg";
+  } else {
+    // OpenStreetMap
+    url = `https://tile.openstreetmap.org/${zoom}/${i}/${j}.png`;
+    ext = ".png";
+  }
+  filename = `${i}_${j}_${zoom}${ext}`;
+  return { url, filename };
 }
+
+/* ============================================================
+  Download Tiles for a Zoom Level (Parallel with Concurrency)
+============================================================ */
+
+async function fn_download_tiles_for_zoom(point1, point2, zoom, folder, force) {
+  const tiles = [];
+  for (let i = point1.x; i <= point2.x; i++) {
+    for (let j = point1.y; j <= point2.y; j++) {
+      tiles.push({ i, j });
+    }
+  }
+
+  totalTiles += tiles.length;
+  console.log(c_colors.BSuccess + `Queueing ${tiles.length} tiles for zoom ${zoom}...` + c_colors.Reset);
+
+  // Process in batches to limit concurrency
+  const concurrency = myArgs.concurrency || DEFAULT_CONCURRENCY;
+  for (let batchStart = 0; batchStart < tiles.length; batchStart += concurrency) {
+    const batch = tiles.slice(batchStart, batchStart + concurrency);
+    await Promise.all(
+      batch.map(async ({ i, j }) => {
+        const { url, filename } = getTileUrlAndFilename(i, j, zoom);
+        const image_path = path.join(folder, filename);
+
+        if (!force && fs.existsSync(image_path)) {
+          console.log(c_colors.FgCyan + `Skipping existing: ${filename}` + c_colors.Reset);
+          downloadedTiles++;
+          updateProgress();
+          return;
+        }
+
+        try {
+          await download_image(url, image_path);
+          console.log(c_colors.BSuccess + `Downloaded: ${filename}` + c_colors.Reset);
+        } catch (error) {
+          console.error(c_colors.BError + `Failed to download ${filename} after retries.` + c_colors.Reset);
+        } finally {
+          downloadedTiles++;
+          updateProgress();
+        }
+      })
+    );
+  }
+}
+
+/* ============================================================
+  Progress Updater
+============================================================ */
+
+function updateProgress() {
+  const progress = ((downloadedTiles / totalTiles) * 100).toFixed(2);
+  console.log(c_colors.FgYellow + `Progress: ${downloadedTiles}/${totalTiles} (${progress}%)` + c_colors.Reset);
+}
+
+/* ============================================================
+  Input Validation and Argument Handling
+============================================================ */
 
 function fn_handle_arguments() {
   myArgs = c_args.getArgs();
   let error = false;
-  if (
-    myArgs.hasOwnProperty("version") === true ||
-    myArgs.hasOwnProperty("v") === true
-    myArgs.hasOwnProperty("help") === true ||
-    myArgs.hasOwnProperty("h") === true
-  ) {
+
+  if (myArgs.help || myArgs.h || myArgs.version || myArgs.v) {
     console.log(
       c_colors.BSuccess +
-        "MAP Cache version" +
+        "MAP Tile Downloader v" +
         c_colors.FgYellow +
-        JSON.stringify(v_pjson.version) +
+        (v_pjson.version || "1.0.0") +
         c_colors.Reset
     );
-    console.log(
-      c_colors.BSuccess +
-        "--lat1" +
-        c_colors.FgWhite +
-        " for Start latitude. " +
-        c_colors.FgYellow +
-        " Example --lat1=-54.652332555" +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--lng1" +
-        c_colors.FgWhite +
-        "  for start longitude. " +
-        c_colors.FgYellow +
-        " Example --lng1=-54.652332555" +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--lat2" +
-        c_colors.FgWhite +
-        "  for end latitude. " +
-        c_colors.FgYellow +
-        " Example --lat2=-54.652332555" +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--lng2" +
-        c_colors.FgWhite +
-        "  for end longitude. " +
-        c_colors.FgYellow +
-        " Example --lng2=-54.652332555" +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--zout" +
-        c_colors.FgWhite +
-        "  for maximum zoom in. You need to check provider normally up to 20" +
-        c_colors.FgYellow +
-        " Example --zout=2 " +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--zin" +
-        c_colors.FgWhite +
-        "  for maximum zoom out. can be as low as 0. " +
-        c_colors.FgYellow +
-        " Example --zin=10 " +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--folder" +
-        c_colors.FgWhite +
-        "  folder to store images in. " +
-        c_colors.FgYellow +
-        " Example --folder=./out " +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--provider" +
-        c_colors.FgWhite +
-        "  if equal to 1 then use https://api.mapbox.com else use tile.openstreetmap.org. " +
-        c_colors.FgYellow +
-        " Example --folder=./out " +
-        c_colors.Reset
-    );
-    console.log(
-      c_colors.BSuccess +
-        "--token" +
-        c_colors.FgWhite +
-        " Required only with https://api.mapbox.com " +
-        c_colors.FgYellow +
-        " Example --folder=pk.eyJ1IjoibZglZm55IiwiYSI698mNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDZXCthXmRsErPzKhbQ " +
-        c_colors.Reset
-    );
-    process.exit();
+    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--lat1, --lng1: Start coordinates (required)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--lat2, --lng2: End coordinates (required)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--zout: Min zoom (default: 0)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--zin: Max zoom (required, e.g., 18)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--folder: Output folder (required, e.g., ./out)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--provider: 0=OSM (default), 1=Mapbox" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--token: Mapbox access token (required if provider=1)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--concurrency: Parallel downloads (default: 5)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--retries: Retry attempts per tile (default: 3)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--force: Redownload existing files (default: false)" + c_colors.Reset);
+    process.exit(0);
   }
-  if (myArgs.hasOwnProperty("lat1") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing start latitude. " +
-        c_colors.FgYellow +
-        " Example --lat1=-54.652332555" +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("lng1") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing start longitude. " +
-        c_colors.FgYellow +
-        " Example --lng1=-54.652332555" +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("lat2") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing end latitude. " +
-        c_colors.FgYellow +
-        " Example --lat2=-54.652332555" +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("lng2") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing end longitude. " +
-        c_colors.FgYellow +
-        " Example --lng2=-54.652332555" +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("zout") !== true) {
-    myArgs.zout = 0;
-    console.log(
-      c_colors.FgCyan +
-        "Missing zoom out max. Use zero as a default. " +
-        c_colors.FgYellow +
-        " Example --zout=0 " +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("zin") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing zoom in max between 18 & 2. " +
-        c_colors.FgYellow +
-        " Example --zin=10 " +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("folder") !== true) {
-    error = true;
-    console.log(
-      c_colors.BError +
-        "Missing output folder. " +
-        c_colors.FgYellow +
-        " Example --folder=./out " +
-        c_colors.Reset
-    );
-  }
-  if (myArgs.hasOwnProperty("provider") === true) {
-    if (myArgs.provider == 1)
-    {
-      map_provider = 1;
-      if (myArgs.hasOwnProperty("token") !== true) {
-        error = true;
-        console.log(
-          c_colors.BError +
-            "Missing TOKEN file for https://api.mapbox.com. " +
-            c_colors.FgYellow +
-            " Example --token=pk.eyJ1IjoibZglZm55IiwiYSI698mNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDZXCthXmRsErPzKhbQ " +
-            c_colors.Reset
-        );
-      }
+
+  // Required args
+  ["lat1", "lng1", "lat2", "lng2", "zin", "folder"].forEach(arg => {
+    if (!myArgs[arg]) {
+      error = true;
+      console.log(c_colors.BError + `Missing required argument: --${arg}` + c_colors.Reset);
+    }
+  });
+
+  // Validate lat/lng
+  ["lat1", "lat2"].forEach(arg => {
+    if (myArgs[arg] && (myArgs[arg] < -90 || myArgs[arg] > 90)) {
+      error = true;
+      console.log(c_colors.BError + `Invalid latitude ${arg}: ${myArgs[arg]} (must be -90 to 90)` + c_colors.Reset);
+    }
+  });
+  ["lng1", "lng2"].forEach(arg => {
+    if (myArgs[arg] && (myArgs[arg] < -180 || myArgs[arg] > 180)) {
+      error = true;
+      console.log(c_colors.BError + `Invalid longitude ${arg}: ${myArgs[arg]} (must be -180 to 180)` + c_colors.Reset);
+    }
+  });
+
+  // Provider and token
+  map_provider = myArgs.provider ? parseInt(myArgs.provider) : DEFAULT_PROVIDER;
+  if (map_provider === 1) {
+    TOKEN = myArgs.token;
+    if (!TOKEN) {
+      error = true;
+      console.log(c_colors.BError + "Missing --token for Mapbox provider." + c_colors.Reset);
     }
   }
 
-  if (map_provider)
-  if (error === true) process.exit(0);
+  // Zooms
+  myArgs.zout = myArgs.zout ? parseInt(myArgs.zout) : DEFAULT_ZOUT;
+  myArgs.zin = parseInt(myArgs.zin);
+  if (myArgs.zout > myArgs.zin || myArgs.zout < 0 || myArgs.zin > 22) { // Reasonable max zoom
+    error = true;
+    console.log(c_colors.BError + "Invalid zoom range: zout <= zin, 0-22." + c_colors.Reset);
+  }
+
+  // Force
+  myArgs.force = myArgs.force === "true" || myArgs.force === true ? true : DEFAULT_FORCE;
+
+  if (error)
+  {
+    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
+  }
+  
+  if (error) process.exit(1);
+
+  // Create folder if needed
+  const folder = myArgs.folder;
+  if (!fs.existsSync(folder)) {
+    fs.mkdirSync(folder, { recursive: true });
+    console.log(c_colors.BSuccess + `Created output folder: ${folder}` + c_colors.Reset);
+  }
 }
 
 /* ============================================================
-  Download Images in Order
+  Main Execution
 ============================================================ */
 
-fn_handle_arguments();
-const folder = myArgs.folder;
-for (var zoom = myArgs.zout; zoom <= myArgs.zin; ++zoom) {
-  const points = fn_convertFromLngLatToPoints(myArgs.lat1, myArgs.lng1, myArgs.lat2, myArgs.lng2, zoom);
+async function main() {
+  fn_handle_arguments();
+  const folder = myArgs.folder;
+  const force = myArgs.force;
 
-  const point1 = points[0];
-  const point2 = points[1];
+  // Calculate total tiles across all zooms for progress
+  for (let zoom = myArgs.zout; zoom <= myArgs.zin; zoom++) {
+    const [point1, point2] = fn_convertFromLngLatToPoints(myArgs.lat1, myArgs.lng1, myArgs.lat2, myArgs.lng2, zoom);
+    totalTiles += (point2.x - point1.x + 1) * (point2.y - point1.y + 1);
+  }
 
-  fn_download_images(point1, point2, zoom);
+  console.log(c_colors.BSuccess + `Total tiles to process: ${totalTiles}` + c_colors.Reset);
+
+  // Download per zoom
+  for (let zoom = myArgs.zout; zoom <= myArgs.zin; zoom++) {
+    const [point1, point2] = fn_convertFromLngLatToPoints(myArgs.lat1, myArgs.lng1, myArgs.lat2, myArgs.lng2, zoom);
+    await fn_download_tiles_for_zoom(point1, point2, zoom, folder, force);
+  }
+
+  console.log(c_colors.BSuccess + "Download complete!" + c_colors.Reset);
 }
+
+main().catch(error => {
+  console.error(c_colors.BError + `Unexpected error: ${error.message}` + c_colors.Reset);
+  process.exit(1);
+});
