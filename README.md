@@ -39,25 +39,25 @@ Watch a demo video showcasing the tool:
 Download map tiles for a geographic area defined by two coordinates (`lat1,lng1` to `lat2,lng2`), a zoom range, and an output folder. Run the script with:
 
 ```bash
-node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> --folder=<output_folder> [options]
+node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> --folder=<output_folder> [options]
 ```
 
 ### Example: Download OSM Tiles
 Download OpenStreetMap tiles for a small area with zoom levels 0 to 14:
 ```bash
-node downloader.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --zout=0 --folder=./site/cachedMaps
+node mapcache_download.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --zout=0 --folder=./site/cachedMaps
 ```
 
 ### Example: Download Mapbox Satellite Tiles
 Download Mapbox satellite tiles (saved as PNG, requires a Mapbox access token):
 ```bash
-node downloader.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --folder=./site/cachedMaps --provider=1 --token=pk.eyJ1IjoibWhlZm55IiwiYSI6ImNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDjXCthXmRsErPzKhbQ
+node mapcache_download.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --folder=./site/cachedMaps --provider=1 --token=pk.eyJ1IjoibWhlZm55IiwiYSI6ImNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDjXCthXmRsErPzKhbQ
 ```
 
 ### Example: Download Mapbox Terrain RGB Tiles
 Download Mapbox terrain RGB tiles for elevation data:
 ```bash
-node downloader.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --folder=./site/cachedMaps --provider=2 --token=pk.eyJ1IjoibWhlZm55IiwiYSI6ImNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDjXCthXmRsErPzKhbQ
+node mapcache_download.js --lat1=40.7128 --lng1=-74.0060 --lat2=40.7228 --lng2=-73.9960 --zin=14 --folder=./site/cachedMaps --provider=2 --token=pk.eyJ1IjoibWhlZm55IiwiYSI6ImNrZW84Nm9rYTA2ZWgycm9mdmNscmFxYzcifQ.c-zxDjXCthXmRsErPzKhbQ
 ```
 
 ### Options

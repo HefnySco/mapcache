@@ -11,7 +11,7 @@
     - Force redownload option.
     - Improved error handling and logging.
 
-    Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
+    Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]
 
     Run with --help for full options.
 */
@@ -226,7 +226,7 @@ function fn_handle_arguments() {
         (v_pjson.version || "1.0.0") +
         c_colors.Reset
     );
-    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "Usage: node mapcache_download.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat1, --lng1: Start coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--lat2, --lng2: End coordinates (required)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--zout: Min zoom (default: 0)" + c_colors.Reset);
