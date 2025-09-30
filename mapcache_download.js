@@ -1,13 +1,13 @@
 /*
-    Enhanced Map Tile Downloader
-    - Downloads map tiles for a given geographic bounding box and zoom range.
-    - Supports OpenStreetMap (default) and Mapbox (with token).
+    Enhanced Map Tile Downloader with Terrain Support and Single Extension
+    - Downloads map tiles (satellite or terrain RGB) for a given geographic bounding box and zoom range.
+    - Saves all tiles as PNG for consistency, converting Mapbox Satellite tiles from JPG to PNG.
+    - Supports OpenStreetMap (default) and Mapbox (with token) for satellite and terrain RGB tiles.
     - Parallel downloads with configurable concurrency to respect rate limits.
     - Retry mechanism for failed downloads.
-    - Proper file extensions (.png for OSM, .jpg for Mapbox).
     - Creates output folder if it doesn't exist.
     - Progress reporting with total count and completion percentage.
-    - Better input validation and default values where sensible.
+    - Better input validation and default values.
     - Force redownload option.
     - Improved error handling and logging.
 
@@ -20,6 +20,7 @@
 const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
+const sharp = require("sharp"); // Added for JPG-to-PNG conversion
 const v_pjson = require("./package.json"); // Assuming this exists; otherwise, hardcode version.
 const c_args = require("./helpers/hlp_args.js"); // Assuming this provides getArgs().
 const c_colors = require("./helpers/js_colors.js").Colors; // Assuming this provides color codes.
@@ -29,7 +30,7 @@ const MAX_LATITUDE = 85.0511287798;
 const R_MINOR = 6356752.314245179; // Not used, but kept for completeness.
 
 // Default values
-const DEFAULT_PROVIDER = 0; // 0: OSM, 1: Mapbox
+const DEFAULT_PROVIDER = 0; // 0: OSM, 1: Mapbox Satellite, 2: Mapbox Terrain RGB
 const DEFAULT_CONCURRENCY = 5; // Safe default to avoid rate limits
 const DEFAULT_RETRIES = 3;
 const DEFAULT_ZOUT = 0;
@@ -105,22 +106,21 @@ function fn_convertFromLngLatToPoints(lat1, lng1, lat2, lng2, zoom) {
   Enhanced Download Function with Retry
 ============================================================ */
 
-const download_image = async (url, image_path, retries = myArgs.retries || DEFAULT_RETRIES) => {
+const download_image = async (url, image_path, isMapboxSatellite = false, retries = myArgs.retries || DEFAULT_RETRIES) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const response = await axios({
         url,
-        responseType: "stream",
+        responseType: "arraybuffer", // Changed to arraybuffer for sharp compatibility
         timeout: 10000, // 10s timeout
       });
 
-      await new Promise((resolve, reject) => {
-        const writer = fs.createWriteStream(image_path);
-        response.data.pipe(writer);
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+      // Convert to PNG if Mapbox Satellite (JPG), otherwise save directly
+      const buffer = isMapboxSatellite
+        ? await sharp(response.data).png().toBuffer()
+        : response.data;
 
+      await fs.promises.writeFile(image_path, buffer);
       return; // Success
     } catch (error) {
       console.log(c_colors.BError + `Attempt ${attempt} failed for ${url}: ${error.message}` + c_colors.Reset);
@@ -137,18 +137,23 @@ const download_image = async (url, image_path, retries = myArgs.retries || DEFAU
 ============================================================ */
 
 function getTileUrlAndFilename(i, j, zoom) {
-  let url, ext, filename;
+  let url, typePrefix, isMapboxSatellite = false;
   if (map_provider === 1) {
     // Mapbox Satellite
     url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/${zoom}/${i}/${j}?access_token=${TOKEN}`;
-    ext = ".jpg";
+    typePrefix = "sat";
+    isMapboxSatellite = true;
+  } else if (map_provider === 2) {
+    // Mapbox Terrain RGB
+    url = `https://api.mapbox.com/v4/mapbox.terrain-rgb/${zoom}/${i}/${j}.png?access_token=${TOKEN}`;
+    typePrefix = "terrain";
   } else {
     // OpenStreetMap
     url = `https://tile.openstreetmap.org/${zoom}/${i}/${j}.png`;
-    ext = ".png";
+    typePrefix = "osm";
   }
-  filename = `${i}_${j}_${zoom}${ext}`;
-  return { url, filename };
+  const filename = `${typePrefix}_${i}_${j}_${zoom}.png`; // Always PNG
+  return { url, filename, isMapboxSatellite };
 }
 
 /* ============================================================
@@ -172,7 +177,7 @@ async function fn_download_tiles_for_zoom(point1, point2, zoom, folder, force) {
     const batch = tiles.slice(batchStart, batchStart + concurrency);
     await Promise.all(
       batch.map(async ({ i, j }) => {
-        const { url, filename } = getTileUrlAndFilename(i, j, zoom);
+        const { url, filename, isMapboxSatellite } = getTileUrlAndFilename(i, j, zoom);
         const image_path = path.join(folder, filename);
 
         if (!force && fs.existsSync(image_path)) {
@@ -183,7 +188,7 @@ async function fn_download_tiles_for_zoom(point1, point2, zoom, folder, force) {
         }
 
         try {
-          await download_image(url, image_path);
+          await download_image(url, image_path, isMapboxSatellite);
           console.log(c_colors.BSuccess + `Downloaded: ${filename}` + c_colors.Reset);
         } catch (error) {
           console.error(c_colors.BError + `Failed to download ${filename} after retries.` + c_colors.Reset);
@@ -227,8 +232,8 @@ function fn_handle_arguments() {
     console.log(c_colors.BSuccess + "--zout: Min zoom (default: 0)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--zin: Max zoom (required, e.g., 18)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--folder: Output folder (required, e.g., ./out)" + c_colors.Reset);
-    console.log(c_colors.BSuccess + "--provider: 0=OSM (default), 1=Mapbox" + c_colors.Reset);
-    console.log(c_colors.BSuccess + "--token: Mapbox access token (required if provider=1)" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--provider: 0=OSM (default), 1=Mapbox Satellite, 2=Mapbox Terrain RGB" + c_colors.Reset);
+    console.log(c_colors.BSuccess + "--token: Mapbox access token (required if provider=1 or 2)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--concurrency: Parallel downloads (default: 5)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--retries: Retry attempts per tile (default: 3)" + c_colors.Reset);
     console.log(c_colors.BSuccess + "--force: Redownload existing files (default: false)" + c_colors.Reset);
@@ -259,18 +264,18 @@ function fn_handle_arguments() {
 
   // Provider and token
   map_provider = myArgs.provider ? parseInt(myArgs.provider) : DEFAULT_PROVIDER;
-  if (map_provider === 1) {
+  if (map_provider === 1 || map_provider === 2) {
     TOKEN = myArgs.token;
     if (!TOKEN) {
       error = true;
-      console.log(c_colors.BError + "Missing --token for Mapbox provider." + c_colors.Reset);
+      console.log(c_colors.BError + "Missing --token for Mapbox provider (satellite or terrain)." + c_colors.Reset);
     }
   }
 
   // Zooms
   myArgs.zout = myArgs.zout ? parseInt(myArgs.zout) : DEFAULT_ZOUT;
   myArgs.zin = parseInt(myArgs.zin);
-  if (myArgs.zout > myArgs.zin || myArgs.zout < 0 || myArgs.zin > 22) { // Reasonable max zoom
+  if (myArgs.zout > myArgs.zin || myArgs.zout < 0 || myArgs.zin > 22) {
     error = true;
     console.log(c_colors.BError + "Invalid zoom range: zout <= zin, 0-22." + c_colors.Reset);
   }
@@ -278,11 +283,6 @@ function fn_handle_arguments() {
   // Force
   myArgs.force = myArgs.force === "true" || myArgs.force === true ? true : DEFAULT_FORCE;
 
-  if (error)
-  {
-    console.log(c_colors.BSuccess + "Usage: node downloader.js --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> [options]" + c_colors.Reset);
-  }
-  
   if (error) process.exit(1);
 
   // Create folder if needed
