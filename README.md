@@ -20,6 +20,21 @@ Watch a demo video showcasing the tool:
 
 ## Installation
 
+
+### Option 1: Install Globally via npm
+Install the package globally to use the `mapcache-download` command from anywhere:
+
+```bash
+npm install -g mapcachetools
+```
+
+Then run the tool with:
+
+```bash
+mapcache-download --lat1=<lat> --lng1=<lng> --lat2=<lat> --lng2=<lng> --zin=<max_zoom> --folder=<output_folder> [options]
+```
+
+### Option 2: Clone and Install Locally
 1. Clone the repository:
    ```bash
    git clone https://github.com/HefnySco/mapcache.git
